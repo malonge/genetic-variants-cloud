@@ -1,0 +1,18 @@
+FROM apache/airflow:2.8.0-python3.11
+
+USER root
+
+# Add airflow user to docker group (for DockerOperator via socket mount)
+RUN groupadd --gid 999 docker \
+    && usermod -aG docker airflow
+
+USER airflow
+RUN pip install --user --no-cache-dir \
+    pysam~=0.22.0 \
+    pydantic~=2.0 \
+    apache-airflow-providers-docker==3.10.0
+
+WORKDIR ${AIRFLOW_HOME}
+COPY dags/ ${AIRFLOW_HOME}/dags/
+COPY src/ ${AIRFLOW_HOME}/src/
+
