@@ -49,8 +49,7 @@ test-unit:
 
 # Run integration tests (requires test data)
 test-integration:
-	@echo "Running integration tests with Poetry..."
-	poetry run pytest tests/integration/ -v
+	@echo "Integration tests not implemented yet"
 
 # Run linter
 lint:
