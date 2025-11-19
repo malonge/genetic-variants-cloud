@@ -1,9 +1,6 @@
 """HTTPS VCF streaming implementation."""
 from typing import Iterator, Optional
-
 import pysam
-
-from src.models import VariantRecord
 
 from .base import VCFStreamer
 
@@ -12,86 +9,54 @@ class HttpsVCFStreamer(VCFStreamer):
     """
     Stream VCF data from remote HTTPS URLs.
 
-    Uses pysam's built-in support for streaming remote files via HTTP/HTTPS.
-    This leverages htslib's ability to make range requests, enabling efficient
-    streaming without downloading the entire file.
-
-    Note: Remote files should ideally have an index (.tbi or .csi) for
-    optimal performance, especially when using region filtering.
+    Uses pysam/htslib's native HTTP(s) support including range requests for
+    indexed VCF/BCF files. Works efficiently even for region queries if the
+    remote endpoint supports HTTP range requests.
     """
 
     def __init__(self, source: str, region: Optional[str] = None):
-        """
-        Initialize HTTPS streamer.
-
-        Args:
-            source: HTTPS URL to VCF file
-            region: Optional genomic region filter
-
-        Raises:
-            ValueError: If URL is not HTTPS
-        """
-        super().__init__(source, region)
-
         if not source.startswith("https://"):
             raise ValueError(f"Source must be HTTPS URL, got: {source}")
+        super().__init__(source, region)
 
-        self._vcf_handle = None
+    def open(self) -> None:
+        """Open the remote VCF using pysam's HTTPS streaming support."""
+        if self._vcf_handle is not None:
+            return
 
-    def stream(self) -> Iterator[VariantRecord]:
-        """
-        Stream variants from remote HTTPS VCF file.
-
-        Yields:
-            VariantRecord objects
-
-        Raises:
-            IOError: If remote file cannot be accessed
-            ValueError: If file format is invalid
-        """
         try:
             self._vcf_handle = pysam.VariantFile(self.source)
-
-            # Fetch from region if specified, otherwise iterate all
-            if self.region:
-                iterator = self._vcf_handle.fetch(region=self.region)
-            else:
-                iterator = self._vcf_handle
-
-            # Convert pysam records to our VariantRecord model
-            for record in iterator:
-                yield self._convert_record(record)
-
         except Exception as e:
-            raise IOError(f"Failed to stream from {self.source}: {e}") from e
-        finally:
-            if self._vcf_handle:
-                self._vcf_handle.close()
-                self._vcf_handle = None
+            raise IOError(f"Failed to open remote VCF {self.source}: {e}")
 
-    def _convert_record(self, pysam_record) -> VariantRecord:
-        """
-        Convert pysam VariantRecord to our VariantRecord model.
-
-        Args:
-            pysam_record: pysam.VariantRecord object
-
-        Returns:
-            Our VariantRecord dataclass
-        """
-        return VariantRecord(
-            chrom=pysam_record.chrom,
-            pos=pysam_record.pos,
-            ref=pysam_record.ref,
-            alts=tuple(pysam_record.alts) if pysam_record.alts else (),
-            id=pysam_record.id if pysam_record.id else None,
-            qual=float(pysam_record.qual) if pysam_record.qual is not None else None,
-            filter=",".join(pysam_record.filter) if pysam_record.filter else None,
-        )
-
-    def __exit__(self, exc_type, exc_val, exc_tb):
-        """Ensure connection is closed."""
-        if self._vcf_handle:
+    def close(self) -> None:
+        """Close the remote handle if open."""
+        if self._vcf_handle is not None:
             self._vcf_handle.close()
             self._vcf_handle = None
 
+    @VCFStreamer.requires_open
+    def get_header(self) -> pysam.VariantHeader:
+        """Retrieve VCF header."""
+        return self._vcf_handle.header
+
+    @VCFStreamer.requires_open
+    def stream(self) -> Iterator[pysam.VariantRecord]:
+        """
+        Stream variants from the remote VCF file.
+
+        Yields:
+            pysam.VariantRecord objects
+        """
+        try:
+            # Region streaming or full streaming
+            iterator = (
+                self._vcf_handle.fetch(region=self.region)
+                if self.region else self._vcf_handle
+            )
+
+            for record in iterator:
+                yield record
+
+        except Exception as e:
+            raise IOError(f"Failed to stream from remote VCF {self.source}: {e}")
