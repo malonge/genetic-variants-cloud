@@ -1,5 +1,6 @@
 import os
 from typing import Iterator, Optional
+
 import pysam
 
 from .base import VCFStreamer

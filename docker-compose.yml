@@ -16,7 +16,7 @@ x-airflow-common: &airflow-common
     
   volumes:
     - /var/run/docker.sock:/var/run/docker.sock
-    - ./data:/data
+    - pipeline-data:/data
     - ./dags:/opt/airflow/dags
     - ./src:/opt/airflow/src
     - ./test_data:/test_data
@@ -78,4 +78,5 @@ services:
 
 volumes:
   postgres-db-volume:
+  pipeline-data:
 

@@ -1,5 +1,6 @@
 """HTTPS VCF streaming implementation."""
 from typing import Iterator, Optional
+
 import pysam
 
 from .base import VCFStreamer
@@ -27,7 +28,7 @@ class HttpsVCFStreamer(VCFStreamer):
         try:
             self._vcf_handle = pysam.VariantFile(self.source)
         except Exception as e:
-            raise IOError(f"Failed to open remote VCF {self.source}: {e}")
+            raise IOError(f"Failed to open remote VCF {self.source}: {e}") from e
 
     def close(self) -> None:
         """Close the remote handle if open."""
@@ -59,4 +60,4 @@ class HttpsVCFStreamer(VCFStreamer):
                 yield record
 
         except Exception as e:
-            raise IOError(f"Failed to stream from remote VCF {self.source}: {e}")
+            raise IOError(f"Failed to stream from remote VCF {self.source}: {e}") from e

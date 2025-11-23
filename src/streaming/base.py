@@ -1,5 +1,5 @@
-from abc import ABC, abstractmethod
 import functools
+from abc import ABC, abstractmethod
 from typing import Iterator, Optional
 
 import pysam
