@@ -20,6 +20,7 @@ x-airflow-common: &airflow-common
     - ./dags:/opt/airflow/dags
     - ./src:/opt/airflow/src
     - ./test_data:/test_data
+    - ./tests:/opt/airflow/tests
     
   depends_on:
     postgres:
@@ -75,6 +76,20 @@ services:
     <<: *airflow-common
     command: scheduler
     restart: always
+
+  e2e-tests:
+    <<: *airflow-common
+    profiles:
+      - test
+    entrypoint: /bin/bash
+    command:
+      - -c
+      - |
+        echo "Waiting for Airflow to be ready..."
+        airflow dags list > /dev/null 2>&1
+        echo "Running E2E tests..."
+        airflow dags trigger vcf_pipeline --conf "$(cat /opt/airflow/tests/e2e/e2e.config)"
+    restart: "no"
 
 volumes:
   postgres-db-volume:
