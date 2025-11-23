@@ -51,6 +51,7 @@ with DAG(
             '--lines-per-shard', '{{ dag_run.conf.get("lines_per_shard", "10000") }}',
             '--storage-type', 'local',
             '--storage-base-path', '/data',
+            '--region', '{{ dag_run.conf.get("region", "chr21") }}',
         ],
 
         mounts=[

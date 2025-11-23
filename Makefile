@@ -18,6 +18,7 @@ help:
 # Install dependencies
 install:
 	@echo "Installing dependencies with Poetry..."
+	poetry lock
 	poetry install
 
 # Build Docker images
