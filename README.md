@@ -6,8 +6,6 @@
 
 Streams VCF files from local/remote sources → Transforms to Parquet → Loads to BigQuery for analytics. Built with production-grade patterns: streaming architecture, Docker isolation, comprehensive testing, and cloud-agnostic design.
 
-**Current Status**: Phase 1 complete (VCF streaming abstraction). Next up: sharding, transformation, BigQuery loading.
-
 ## Quick Start
 
 ```bash
@@ -17,70 +15,23 @@ make install
 # Run tests
 make test-unit
 
+# Run E2E tests
+# Processes a portion of the 1000 Genomes Project, chr21, T2T-CHM13v2.0
+make test-e2e
+
 # Build and start Airflow
 make build
 make up
 
 # Access Airflow UI
 open http://localhost:8080  # Login: admin/admin
-
-# Trigger the pipeline
-docker-compose exec airflow-scheduler airflow dags trigger vcf_pipeline
 ```
 
-**Note**: Add a test VCF file to `test_data/sample.vcf.gz` before running.
+## Data Persistence
 
-## Testing
+When running the pipeline locally the postgres database is persisted in a Docker volume called `postgres-db-volume` and the output variant data is persisted in a Docker volume called `pipeline-data`. This can be adjusted/customized in the `docker-compose.yml` file.
 
-```bash
-# All unit tests
-make test-unit
-
-# With coverage
-poetry run pytest tests/unit/ --cov=src
-
-# Linting
-make lint
-```
-
-**Coverage**: Data models, streaming (local/HTTPS), factory pattern, error handling, resource cleanup.
-
-## Architecture
-
-```
-Airflow Scheduler
-    ↓
-DockerOperator spawns Pipeline Worker Container
-    ↓
-VCFStreamer (abstract) → LocalVCFStreamer | HttpsVCFStreamer
-    ↓
-Streams VariantRecord objects → Future: Shard → Transform → Load to BigQuery
-```
-
-**Key Patterns**:
-- Abstract interface decoupled from pysam implementation
-- Factory pattern for URI-based streamer selection
-- Docker-first for scalability and isolation
-
-## Project Structure
-
-```
-├── dags/                  # Airflow DAG definitions
-├── src/
-│   ├── models.py          # VariantRecord dataclass
-│   ├── streaming/         # VCF streaming implementations
-│   └── tasks/             # Airflow task logic
-├── tests/
-│   ├── unit/              # Unit tests with mocks
-│   └── integration/       # End-to-end tests
-├── Dockerfile.airflow     # Airflow image
-├── Dockerfile.pipeline    # Pipeline worker image
-└── docker-compose.yml     # Service orchestration
-```
-
-## Tech Stack
-
-Python 3.11 • Apache Airflow 2.8 • Docker • pysam • pytest • Poetry
+When running the pipeline in the cloud the persistent storage type can be configured. More details TBD.
 
 ---
 

@@ -18,6 +18,7 @@ help:
 # Install dependencies
 install:
 	@echo "Installing dependencies with Poetry..."
+	poetry lock
 	poetry install
 
 # Build Docker images
@@ -25,11 +26,11 @@ build:
 	@echo "Building pipeline worker image..."
 	docker build -t genetic-variants-pipeline:latest -f Dockerfile.pipeline .
 	@echo "Building Airflow image..."
-	docker-compose build
+	docker compose build
 
 # Start services
 up:
-	docker-compose up -d
+	docker compose up -d
 	@echo "⏳ Waiting for services to be healthy..."
 	@sleep 15
 	@echo "✅ Airflow UI available at http://localhost:8080"
@@ -37,7 +38,7 @@ up:
 
 # Stop services
 down:
-	docker-compose down
+	docker compose down
 
 # Run all tests
 test: test-unit
@@ -46,6 +47,11 @@ test: test-unit
 test-unit:
 	@echo "Running unit tests with Poetry..."
 	poetry run pytest tests/unit/ -v
+
+# Run E2E tests
+test-e2e:
+	@echo "Running E2E tests..."
+	docker compose run --rm e2e-tests
 
 # Run integration tests (requires test data)
 test-integration:
@@ -58,11 +64,11 @@ lint:
 
 # View logs
 logs:
-	docker-compose logs -f airflow-scheduler
+	docker compose logs -f airflow-scheduler
 
 # Clean everything
 clean:
-	docker-compose down -v
+	docker compose down -v
 	docker rmi genetic-variants-pipeline:latest || true
 	rm -rf data/*
 	find . -type d -name __pycache__ -exec rm -rf {} + 2>/dev/null || true

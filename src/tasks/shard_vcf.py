@@ -64,10 +64,8 @@ def shard_vcf_task(
     logger.info(f"  Run ID: {run_id}")
     logger.info(f"  Storage: {storage_type}")
 
-    # Initialize storage handler
+    # Initialize storage handler and streamer
     storage = create_storage(storage_type=storage_type, base_path=storage_base_path)
-
-    # Initialize streamer
     streamer = create_streamer(source, region)
 
     try:
@@ -82,6 +80,7 @@ def shard_vcf_task(
         variant_count = 0
         buffer = []
 
+        # Stream the body of the VCF file
         with streamer:
             for record in streamer.stream():
                 buffer.append(record)
