@@ -48,12 +48,7 @@ logs/
 airflow-webserver.pid
 
 # Data files
-data/
-*.vcf
-*.vcf.gz
-*.bcf
-*.tbi
-*.csi
+data
 
 # Docker
 .env.local
