@@ -48,7 +48,15 @@ logs/
 airflow-webserver.pid
 
 # Data files
-data
+data/
+*.duckdb*
+*.tbi
+*.csi
+
+# dbt
+dbt_genomics/target/
+dbt_genomics/dbt_packages/
+dbt_genomics/logs/
 
 # Docker
 .env.local

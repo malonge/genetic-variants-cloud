@@ -1,7 +1,7 @@
 [tool.poetry]
 name = "genetic-variants-cloud"
-version = "0.1.0"
-description = "Scalable ETL pipeline for transforming VCF genetic variant data into BigQuery"
+version = "0.2.0"
+description = "Scalable ELT pipeline transforming VCF genetic variant data to Parquet, DuckDB, and dbt Core"
 authors = ["Michael Alonge"]
 readme = "README.md"
 packages = [{include = "src"}]
@@ -10,6 +10,11 @@ packages = [{include = "src"}]
 python = ">=3.11,<3.12"
 pysam = "0.23.3"
 pydantic = "^2.0.0"
+pyarrow = ">=14.0.0"
+duckdb = ">=0.9.0"
+dbt-duckdb = ">=1.7.0"
+requests = "^2.31.0"
+typer = "^0.9.0"
 
 [tool.poetry.group.airflow]
 optional = true
@@ -59,4 +64,3 @@ ignore = [
 [build-system]
 requires = ["poetry-core"]
 build-backend = "poetry.core.masonry.api"
-

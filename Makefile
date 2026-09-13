@@ -1,66 +1,83 @@
-# Makefile for VCF Pipeline Project
+# Makefile for Genomic ELT Pipeline Project (VCF -> Parquet -> DuckDB -> dbt)
 
-.PHONY: help install build up down test test-unit test-integration lint clean logs
+.PHONY: help install pipeline-extract pipeline-samples pipeline-run dbt-run dbt-test dbt-docs test test-unit lint clean build up down logs
 
 help:
 	@echo "Available commands:"
-	@echo "  make install            - Install dependencies with Poetry"
-	@echo "  make build              - Build Docker images"
-	@echo "  make up                 - Start all services (Airflow, Postgres)"
-	@echo "  make down               - Stop all services"
-	@echo "  make test               - Run all tests"
-	@echo "  make test-unit          - Run unit tests only"
-	@echo "  make test-integration   - Run integration tests"
-	@echo "  make lint               - Run linter (ruff)"
-	@echo "  make logs               - View Airflow logs"
-	@echo "  make clean              - Clean up containers and volumes"
+	@echo "  make install            - Install Python dependencies via Poetry"
+	@echo "  make pipeline-run       - Run extraction (VCF -> Parquet & IGSR metadata)"
+	@echo "  make dbt-run            - Execute dbt transformations in DuckDB"
+	@echo "  make dbt-test           - Run dbt schema and data quality tests"
+	@echo "  make dbt-docs           - Generate dbt documentation"
+	@echo "  make test               - Run all pytest test suites"
+	@echo "  make lint               - Run ruff linter"
+	@echo "  make build              - Build Docker containers"
+	@echo "  make up                 - Start Airflow & PostgreSQL services"
+	@echo "  make down               - Stop services"
+	@echo "  make clean              - Clean local build artifacts and databases"
 
 # Install dependencies
 install:
 	@echo "Installing dependencies with Poetry..."
-	poetry lock
-	poetry install
+	poetry install --no-interaction
 
-# Build Docker images
-build:
-	@echo "Building pipeline worker image..."
-	docker build -t genetic-variants-pipeline:latest -f Dockerfile.pipeline .
-	@echo "Building Airflow image..."
-	docker compose build
+# Extract VCF slice directly to Bronze Parquet
+pipeline-extract:
+	@echo "Extracting VCF variants to Bronze Parquet..."
+	poetry run python -m src.tasks.vcf_to_parquet \
+		"https://s3-us-west-2.amazonaws.com/human-pangenomics/T2T/CHM13/assemblies/variants/1000_Genomes_Project/chm13v2.0/all_samples_3202/1KGP.CHM13v2.0.chr21.recalibrated.snp_indel.pass.vcf.gz" \
+		--region "chr21:10000000-10050000" \
+		--lines-per-shard 5000 \
+		--storage-base-path "data"
 
-# Start services
-up:
-	docker compose up -d
-	@echo "⏳ Waiting for services to be healthy..."
-	@sleep 15
-	@echo "✅ Airflow UI available at http://localhost:8080"
-	@echo "   Login: admin / admin"
+# Ingest IGSR sample pedigree metadata
+pipeline-samples:
+	@echo "Ingesting 1000 Genomes sample metadata..."
+	poetry run python -m src.tasks.ingest_samples --storage-base-path "data"
 
-# Stop services
-down:
-	docker compose down
+# Full extraction
+pipeline-run: pipeline-extract pipeline-samples
 
-# Run all tests
+# dbt transformations
+dbt-run:
+	@echo "Running dbt transformations in DuckDB..."
+	cd dbt_genomics && poetry run dbt run --profiles-dir .
+
+# dbt data tests
+dbt-test:
+	@echo "Running dbt data quality tests..."
+	cd dbt_genomics && poetry run dbt test --profiles-dir .
+
+# dbt docs
+dbt-docs:
+	@echo "Generating dbt documentation..."
+	cd dbt_genomics && poetry run dbt docs generate --profiles-dir .
+
+# Run test suite
 test: test-unit
 
-# Run unit tests
 test-unit:
 	@echo "Running unit tests with Poetry..."
 	poetry run pytest tests/unit/ -v
-
-# Run E2E tests
-test-e2e:
-	@echo "Running E2E tests..."
-	docker compose run --rm e2e-tests
-
-# Run integration tests (requires test data)
-test-integration:
-	@echo "Integration tests not implemented yet"
 
 # Run linter
 lint:
 	@echo "Running ruff linter..."
 	poetry run ruff check src/ tests/
+
+# Docker build
+build:
+	@echo "Building Docker images..."
+	docker compose build
+
+# Start services
+up:
+	docker compose up -d
+	@echo "Airflow UI available at http://localhost:8080 (admin / admin)"
+
+# Stop services
+down:
+	docker compose down
 
 # View logs
 logs:
@@ -68,9 +85,8 @@ logs:
 
 # Clean everything
 clean:
-	docker compose down -v
-	docker rmi genetic-variants-pipeline:latest || true
-	rm -rf data/*
+	docker compose down -v 2>/dev/null || true
+	rm -rf data/*.duckdb* data/bronze/
 	find . -type d -name __pycache__ -exec rm -rf {} + 2>/dev/null || true
 	find . -type f -name "*.pyc" -delete 2>/dev/null || true
-
+	rm -rf dbt_genomics/target dbt_genomics/dbt_packages

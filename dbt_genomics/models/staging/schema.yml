@@ -1,0 +1,68 @@
+version: 2
+
+models:
+  - name: stg_variants
+    description: "Normalized and cleaned variant sites extracted from raw Parquet files"
+    columns:
+      - name: variant_id
+        description: "Primary surrogate key for the variant (chrom:pos:ref:alt)"
+        tests:
+          - unique
+          - not_null
+      - name: chrom
+        description: "Chromosome identifier"
+        tests:
+          - not_null
+      - name: pos
+        description: "1-based genomic start coordinate"
+        tests:
+          - not_null
+          - is_valid_genomic_coordinate
+      - name: ref
+        description: "Reference allele sequence"
+        tests:
+          - not_null
+      - name: variant_type
+        description: "Variant classification: SNV, INSERTION, DELETION, or COMPLEX_INDEL"
+        tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values: ['SNV', 'INSERTION', 'DELETION', 'COMPLEX_INDEL']
+      - name: mutation_class
+        description: "Mutation class for SNVs (TRANSITION vs TRANSVERSION)"
+        tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values: ['TRANSITION', 'TRANSVERSION', 'NON_SNV']
+      - name: primary_af
+        description: "Allele frequency of primary alternate allele"
+        tests:
+          - in_range:
+              arguments:
+                min_val: 0.0
+                max_val: 1.0
+
+  - name: stg_samples
+    description: "Standardized sample demographic and pedigree metadata"
+    columns:
+      - name: sample_id
+        description: "Unique sample identifier"
+        tests:
+          - unique
+          - not_null
+      - name: sex_label
+        description: "Sex classification"
+        tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values: ['MALE', 'FEMALE', 'UNKNOWN']
+      - name: superpopulation
+        description: "Continental ancestry group (AFR, AMR, EAS, EUR, SAS)"
+        tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values: ['AFR', 'AMR', 'EAS', 'EUR', 'SAS']

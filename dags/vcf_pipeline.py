@@ -1,20 +1,19 @@
 """
-VCF Processing Pipeline DAG
+Genomics ELT Pipeline DAG
 
-This DAG orchestrates the VCF processing pipeline:
-1. Shard VCF data into compressed BCF files with indices
-2. Convert BCF shards to TSV (future)
-3. Convert TSV to Parquet (future)
-4. Load Parquet to BigQuery (future)
-
-Each task runs in an isolated container with the pipeline code and dependencies.
+Orchestrates the modern genomic data platform:
+1. Extract remote VCF variants directly to Bronze partitioned Parquet via PyArrow
+2. Ingest 3,202 IGSR sample pedigree/population metadata
+3. Run dbt models with DuckDB (Staging -> Intermediate -> Marts)
+4. Execute dbt data quality tests
 """
 
+import os
 from datetime import datetime, timedelta
 
 from airflow import DAG
-from airflow.providers.docker.operators.docker import DockerOperator
-from docker.types import Mount
+from airflow.operators.bash import BashOperator
+from airflow.operators.python import PythonOperator
 
 default_args = {
     'owner': 'airflow',
@@ -25,49 +24,75 @@ default_args = {
     'retry_delay': timedelta(minutes=5),
 }
 
+DEFAULT_VCF_SOURCE = (
+    "https://s3-us-west-2.amazonaws.com/human-pangenomics/T2T/CHM13/assemblies/variants/"
+    "1000_Genomes_Project/chm13v2.0/all_samples_3202/"
+    "1KGP.CHM13v2.0.chr21.recalibrated.snp_indel.pass.vcf.gz"
+)
+
+
+def run_vcf_to_parquet(**context):
+    """Python task to extract VCF directly to Bronze Parquet."""
+    from src.tasks.vcf_to_parquet import vcf_to_parquet_task
+
+    conf = context['dag_run'].conf or {}
+    source = conf.get("vcf_source", DEFAULT_VCF_SOURCE)
+    region = conf.get("region", "chr21:10000000-10050000")
+    lines_per_shard = int(conf.get("lines_per_shard", 5000))
+    limit = conf.get("limit")
+    if limit is not None:
+        limit = int(limit)
+    storage_base_path = conf.get("storage_base_path", "/data")
+
+    return vcf_to_parquet_task(
+        source=source,
+        region=region,
+        lines_per_shard=lines_per_shard,
+        limit=limit,
+        storage_base_path=storage_base_path,
+    )
+
+
+def run_ingest_samples(**context):
+    """Python task to ingest 1000 Genomes IGSR sample metadata."""
+    from src.tasks.ingest_samples import ingest_sample_metadata_task
+
+    conf = context['dag_run'].conf or {}
+    storage_base_path = conf.get("storage_base_path", "/data")
+
+    return ingest_sample_metadata_task(storage_base_path=storage_base_path)
+
 
 with DAG(
-    'vcf_pipeline',
+    'genomics_elt_pipeline',
     default_args=default_args,
-    description='Stream, shard, and process VCF genetic variant data',
-    schedule_interval=None,  # Manual trigger only
-    start_date=datetime(2025, 11, 15),
+    description='Automated VCF -> Parquet -> DuckDB -> dbt ELT pipeline',
+    schedule_interval=None,  # Manual trigger or event-driven
+    start_date=datetime(2026, 1, 1),
     catchup=False,
-    tags=['genomics', 'vcf', 'streaming', 'sharding'],
+    tags=['genomics', 'vcf', 'parquet', 'duckdb', 'dbt', 'elt'],
 ) as dag:
 
-    shard_vcf = DockerOperator(
-        task_id='shard_vcf',
-        image='genetic-variants-pipeline:latest',
-        api_version='auto',
-        auto_remove=True,
-        docker_url='unix://var/run/docker.sock',
-        network_mode='bridge',
-
-        command=[
-            'python', '-m', 'src.tasks.shard_vcf',
-            # Use Airflow variable/param for source file
-            '{{ dag_run.conf.get("vcf_source", "/test_data/sample.vcf.gz") }}',
-            '--lines-per-shard', '{{ dag_run.conf.get("lines_per_shard", "10000") }}',
-            '--storage-type', 'local',
-            '--storage-base-path', '/data',
-            '--region', '{{ dag_run.conf.get("region", "chr21") }}',
-        ],
-
-        mounts=[
-            Mount(
-                source='genetic-variants-cloud_pipeline-data',
-                target='/data',
-                type='volume'
-            ),
-            Mount(
-                source='/Users/malonge/Repos/genetic-variants-cloud/test_data',
-                target='/test_data',
-                type='bind',
-                read_only=True
-            ),
-        ],
-
-        mem_limit='2g',
-        mount_tmp_dir=False,
+    extract_vcf_to_parquet = PythonOperator(
+        task_id='extract_vcf_to_parquet',
+        python_callable=run_vcf_to_parquet,
+        provide_context=True,
     )
+
+    ingest_sample_metadata = PythonOperator(
+        task_id='ingest_sample_metadata',
+        python_callable=run_ingest_samples,
+        provide_context=True,
+    )
+
+    dbt_run = BashOperator(
+        task_id='dbt_run',
+        bash_command='cd /opt/airflow/dbt_genomics && dbt run --profiles-dir .',
+    )
+
+    dbt_test = BashOperator(
+        task_id='dbt_test',
+        bash_command='cd /opt/airflow/dbt_genomics && dbt test --profiles-dir .',
+    )
+
+    [extract_vcf_to_parquet, ingest_sample_metadata] >> dbt_run >> dbt_test

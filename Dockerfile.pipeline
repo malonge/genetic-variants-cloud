@@ -25,5 +25,5 @@ COPY src/ ./src/
 
 ENV PYTHONPATH=/app
 
-CMD ["python", "-m", "src.tasks.stream_vcf"]
+CMD ["python", "-m", "src.tasks.vcf_to_parquet", "--help"]
 

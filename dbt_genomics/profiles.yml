@@ -1,0 +1,15 @@
+dbt_genomics:
+  target: dev
+  outputs:
+    dev:
+      type: duckdb
+      path: "../data/genomics.duckdb"
+      threads: 4
+      extensions:
+        - parquet
+    test:
+      type: duckdb
+      path: ":memory:"
+      threads: 4
+      extensions:
+        - parquet

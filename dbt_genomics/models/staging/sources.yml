@@ -1,0 +1,16 @@
+version: 2
+
+sources:
+  - name: bronze
+    description: "Raw external files extracted from VCF and IGSR metadata"
+    tables:
+      - name: raw_variants
+        description: "Partitioned Parquet files containing genomic variants with nested sample calls"
+        config:
+          meta:
+            external_location: "'../data/bronze/variants/**/*.parquet'"
+      - name: raw_samples
+        description: "IGSR 3,202-sample pedigree and population metadata TSV"
+        config:
+          meta:
+            external_location: "'../data/bronze/samples/samples.tsv'"

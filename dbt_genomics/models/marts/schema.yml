@@ -1,0 +1,43 @@
+version: 2
+
+models:
+  - name: fct_genomic_bin_density
+    description: "Genomic window density and diversity metrics aggregated across 100kb intervals"
+    columns:
+      - name: bin_start
+        description: "Start coordinate of 100kb genomic interval"
+        tests:
+          - not_null
+      - name: total_variants
+        description: "Total number of variant sites in bin"
+        tests:
+          - not_null
+      - name: variant_density_per_kb
+        description: "Variants per kilobase"
+        tests:
+          - not_null
+
+  - name: fct_population_differentiation
+    description: "Allele frequency and heterozygosity rate stratified across continental ancestries"
+    columns:
+      - name: variant_id
+        description: "Variant identifier"
+        tests:
+          - unique
+          - not_null
+      - name: is_highly_differentiated
+        description: "Flag indicating whether allele frequency divergence >= 0.30"
+        tests:
+          - not_null
+
+  - name: fct_variant_qc_metrics
+    description: "Variant quality and transition/transversion calibration matrix"
+    columns:
+      - name: qual_tier
+        description: "QUAL score tier"
+        tests:
+          - not_null
+      - name: frequency_tier
+        description: "Allele frequency bracket"
+        tests:
+          - not_null
