@@ -4,7 +4,7 @@
 
 help:
 	@echo "Available commands:"
-	@echo "  make install            - Install Python dependencies via Poetry"
+	@echo "  make install            - Install Python dependencies via uv"
 	@echo "  make pipeline-run       - Run extraction (VCF -> Parquet & IGSR metadata)"
 	@echo "  make dbt-run            - Execute dbt transformations in DuckDB"
 	@echo "  make dbt-test           - Run dbt schema and data quality tests"
@@ -18,13 +18,13 @@ help:
 
 # Install dependencies
 install:
-	@echo "Installing dependencies with Poetry..."
-	poetry install --no-interaction
+	@echo "Installing dependencies with uv..."
+	uv sync --all-groups
 
 # Extract VCF slice directly to Bronze Parquet
 pipeline-extract:
 	@echo "Extracting VCF variants to Bronze Parquet..."
-	poetry run python -m src.tasks.vcf_to_parquet \
+	uv run python -m src.tasks.vcf_to_parquet \
 		"https://s3-us-west-2.amazonaws.com/human-pangenomics/T2T/CHM13/assemblies/variants/1000_Genomes_Project/chm13v2.0/all_samples_3202/1KGP.CHM13v2.0.chr21.recalibrated.snp_indel.pass.vcf.gz" \
 		--region "chr21:10000000-10050000" \
 		--lines-per-shard 5000 \
@@ -33,7 +33,7 @@ pipeline-extract:
 # Ingest IGSR sample pedigree metadata
 pipeline-samples:
 	@echo "Ingesting 1000 Genomes sample metadata..."
-	poetry run python -m src.tasks.ingest_samples --storage-base-path "data"
+	uv run python -m src.tasks.ingest_samples --storage-base-path "data"
 
 # Full extraction
 pipeline-run: pipeline-extract pipeline-samples
@@ -41,29 +41,29 @@ pipeline-run: pipeline-extract pipeline-samples
 # dbt transformations
 dbt-run:
 	@echo "Running dbt transformations in DuckDB..."
-	cd dbt_genomics && poetry run dbt run --profiles-dir .
+	cd dbt_genomics && uv run dbt run --profiles-dir .
 
 # dbt data tests
 dbt-test:
 	@echo "Running dbt data quality tests..."
-	cd dbt_genomics && poetry run dbt test --profiles-dir .
+	cd dbt_genomics && uv run dbt test --profiles-dir .
 
 # dbt docs
 dbt-docs:
 	@echo "Generating dbt documentation..."
-	cd dbt_genomics && poetry run dbt docs generate --profiles-dir .
+	cd dbt_genomics && uv run dbt docs generate --profiles-dir .
 
 # Run test suite
 test: test-unit
 
 test-unit:
-	@echo "Running unit tests with Poetry..."
-	poetry run pytest tests/unit/ -v
+	@echo "Running unit tests with uv..."
+	uv run pytest tests/unit/ -v
 
 # Run linter
 lint:
 	@echo "Running ruff linter..."
-	poetry run ruff check src/ tests/
+	uv run ruff check src/ tests/
 
 # Docker build
 build:

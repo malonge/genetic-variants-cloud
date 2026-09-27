@@ -36,7 +36,7 @@ Both datasets used in this pipeline are open-access, publicly hosted, and verifi
                                          ▼ (HTTPS Range Stream via pysam)
                       ┌───────────────────────────────────────┐
                       │    Direct Streamer & Arrow Batcher    │
-                      │  (No intermediate BCF or TSV writes)  │
+                      │  (Direct memory batching to Parquet)  │
                       └──────────────────┬────────────────────┘
                                          │
                                          ▼
@@ -60,16 +60,14 @@ Both datasets used in this pipeline are open-access, publicly hosted, and verifi
  ┌─────────────────────────────────────────────────────────────────────────────┐
  │ dbt Transformation Layer (dbt-duckdb)                                       │
  │                                                                             │
- │  [Staging]                                                                  │
+ │  [Silver: Staging & Intermediate]                                           │
  │   ├── stg_variants.sql (Cleaned types, SNV/Indel classification)             │
- │   └── stg_samples.sql  (Standardized sample IDs, sex, ancestry codes)      │
- │                                                                             │
- │  [Intermediate]                                                             │
+ │   ├── stg_samples.sql  (Standardized sample IDs, sex, ancestry codes)      │
  │   ├── int_variant_sample_genotypes.sql (Unnested genotype matrix with QC)   │
  │   ├── int_genomic_binned_stats.sql      (100kb genomic window aggregations) │
  │   └── int_population_allele_freqs.sql  (Allele frequencies by superpop)    │
  │                                                                             │
- │  [Marts / Serving]                                                          │
+ │  [Gold: Marts / Serving]                                                    │
  │   ├── fct_genomic_bin_density.sql       (Density, heterozygosity rate/kb)   │
  │   ├── fct_population_differentiation.sql (Cross-population allele spread)    │
  │   └── fct_variant_qc_metrics.sql        (Ti/Tv ratios, GQ/DP calibration)   │
@@ -86,11 +84,10 @@ Both datasets used in this pipeline are open-access, publicly hosted, and verifi
 
 ## 4. Key Architectural Decisions & Rationale
 
-### 4.1 Direct VCF → Arrow → Parquet (Eliminating Intermediate BCF/TSV)
-* **Legacy approach**: Sharded VCF into intermediate BCF files, indexed them with `bcftools`, then planned a conversion from BCF to TSV and TSV to Parquet.
-* **Overhaul approach**: Stream records directly using `pysam` over HTTPS into PyArrow `RecordBatch` / `Table` objects and write directly to Parquet with ZSTD compression.
+### 4.1 Direct VCF → Arrow → Parquet (Zero Intermediate Disk Writes)
+* **Design**: Stream records directly using `pysam` over HTTPS into PyArrow `RecordBatch` / `Table` objects and write directly to Parquet with ZSTD compression.
 * **Benefits**:
-  * Reduces disk I/O by orders of magnitude (no intermediate uncompressed/compressed files).
+  * Minimizes disk I/O by bypassing uncompressed intermediate representations.
   * Enforces typed Arrow schemas at write time without lossy string conversion.
   * Preserves exact VCF data types (floats, lists of alternate alleles, integers).
 
@@ -115,10 +112,14 @@ Both datasets used in this pipeline are open-access, publicly hosted, and verifi
 * Supports out-of-core streaming execution, vectorized columnar execution, and rich list/struct SQL manipulation.
 * Perfect for local reproducibility, CI testing, and cost-effective analytical querying without cloud warehouse vendor lock-in.
 
-### 4.4 dbt Core (Medallion Architecture)
-* **Staging (`stg_`)**: Clean column naming, cast data types, filter valid variants, standardize genotype encodings (`0/0` $\rightarrow$ Hom-Ref, `0/1` $\rightarrow$ Het, `1/1` $\rightarrow$ Hom-Alt).
-* **Intermediate (`int_`)**: Unnest genotypes, join demographic and population metadata, compute genomic coordinate bin indices (`floor(pos / 100000) * 100000`), tag transition vs. transversion (Ti/Tv).
-* **Marts (`fct_` / `dim_`)**: Highly denormalized, ready-to-query analytical tables optimized for dashboards and population genetics reporting.
+### 4.4 Medallion Architecture (Bronze → Silver → Gold via dbt Core)
+The data platform follows a classic **Medallion Architecture**, progressing data from raw ingested representations to curated analytical products:
+* **Bronze (Raw Ingestion)**: External tables (`bronze.raw_variants`, `bronze.raw_samples`) reading directly from raw partitioned Parquet and raw IGSR metadata TSV.
+* **Silver (Staging & Intermediate Transformations)**:
+  * **Staging (`stg_variants`, `stg_samples`)**: Clean column naming, cast data types, filter valid variants, standardize genotype encodings (`0/0` $\rightarrow$ Hom-Ref, `0/1` $\rightarrow$ Het, `1/1` $\rightarrow$ Hom-Alt).
+  * **Intermediate (`int_variant_sample_genotypes`, `int_genomic_binned_stats`, `int_population_allele_freqs`)**: Unnest genotypes, join demographic and population metadata, compute genomic coordinate bin indices (`floor(pos / 100000) * 100000`), tag transition vs. transversion (Ti/Tv).
+* **Gold (Marts / Serving Layer)**:
+  * **Analytical Marts (`fct_genomic_bin_density`, `fct_population_differentiation`, `fct_variant_qc_metrics`)**: Highly curated, aggregated, and ready-to-query analytical tables optimized for downstream BI tools, dashboards, and population genetics reporting.
 
 ---
 
@@ -143,6 +144,7 @@ The dbt layer showcases three distinct analytical models demonstrating deep SQL 
 
 ## 6. Testing, Quality Assurance & Orchestration
 
+* **Tooling & Dependency Management**: Fully migrated to `uv` for deterministic, blazingly fast dependency resolution and environment management.
 * **Unit Testing (`pytest`)**: Verify VCF streaming, Arrow batching, and schema formatting.
 * **dbt Data Tests**:
   * Built-in tests: `unique`, `not_null`, `accepted_values`.
@@ -151,6 +153,6 @@ The dbt layer showcases three distinct analytical models demonstrating deep SQL 
   * End-to-end DAG orchestrating:
     1. Extract remote VCF to Bronze Parquet.
     2. Download & stage IGSR sample metadata.
-    3. Run dbt models (`dbt run`).
+    3. Run Silver & Gold dbt models (`dbt run`).
     4. Run dbt tests (`dbt test`).
     5. Generate documentation and lineage (`dbt docs generate`).

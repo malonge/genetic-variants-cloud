@@ -1,10 +1,10 @@
 """
 Genomics ELT Pipeline DAG
 
-Orchestrates the modern genomic data platform:
+The data platform implements a Medallion Architecture (Bronze raw ingestion -> Silver staging & intermediate normalization -> Gold analytics-ready data marts):
 1. Extract remote VCF variants directly to Bronze partitioned Parquet via PyArrow
-2. Ingest 3,202 IGSR sample pedigree/population metadata
-3. Run dbt models with DuckDB (Staging -> Intermediate -> Marts)
+2. Ingest 3,202 IGSR sample pedigree/population metadata into Bronze
+3. Run Silver and Gold dbt models with DuckDB
 4. Execute dbt data quality tests
 """
 

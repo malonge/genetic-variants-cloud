@@ -1,33 +1,52 @@
-[tool.poetry]
+[project]
 name = "genetic-variants-cloud"
 version = "0.2.0"
 description = "Scalable ELT pipeline transforming VCF genetic variant data to Parquet, DuckDB, and dbt Core"
-authors = ["Michael Alonge"]
 readme = "README.md"
-packages = [{include = "src"}]
+requires-python = ">=3.11,<3.12"
+authors = [
+    { name = "Michael Alonge" },
+]
+dependencies = [
+    "pysam>=0.22.0",
+    "pydantic>=2.0.0",
+    "pyarrow>=14.0.0",
+    "duckdb>=0.9.0",
+    "dbt-duckdb>=1.7.0",
+    "requests>=2.31.0",
+    "typer>=0.9.0",
+]
 
-[tool.poetry.dependencies]
-python = ">=3.11,<3.12"
-pysam = "0.23.3"
-pydantic = "^2.0.0"
-pyarrow = ">=14.0.0"
-duckdb = ">=0.9.0"
-dbt-duckdb = ">=1.7.0"
-requests = "^2.31.0"
-typer = "^0.9.0"
+[project.optional-dependencies]
+airflow = [
+    "apache-airflow==2.8.0",
+    "apache-airflow-providers-docker==3.10.0",
+]
+dev = [
+    "pytest>=7.4.0",
+    "pytest-cov>=4.1.0",
+    "pytest-mock>=3.12.0",
+    "ruff>=0.1.0",
+]
 
-[tool.poetry.group.airflow]
-optional = true
+[dependency-groups]
+dev = [
+    "pytest>=7.4.0",
+    "pytest-cov>=4.1.0",
+    "pytest-mock>=3.12.0",
+    "ruff>=0.1.0",
+]
+airflow = [
+    "apache-airflow==2.8.0",
+    "apache-airflow-providers-docker==3.10.0",
+]
 
-[tool.poetry.group.airflow.dependencies]
-apache-airflow = "2.8.0"
-apache-airflow-providers-docker = "3.10.0"
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
 
-[tool.poetry.group.dev.dependencies]
-pytest = "^7.4.0"
-pytest-cov = "^4.1.0"
-pytest-mock = "^3.12.0"
-ruff = "^0.1.0"
+[tool.hatch.build.targets.wheel]
+packages = ["src"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
@@ -60,7 +79,3 @@ select = [
 ignore = [
     "E501",  # line too long (handled by formatter)
 ]
-
-[build-system]
-requires = ["poetry-core"]
-build-backend = "poetry.core.masonry.api"

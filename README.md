@@ -21,7 +21,7 @@ The pipeline extracts multi-sample Variant Call Format (VCF) data from the **100
                                          ▼ (HTTPS Range Stream via pysam)
                       ┌───────────────────────────────────────┐
                       │    Direct Streamer & Arrow Batcher    │
-                      │  (Zero intermediate BCF / TSV disk I/O)│
+                      │  (Direct memory batching to Parquet)  │
                       └──────────────────┬────────────────────┘
                                          │
                                          ▼
@@ -44,16 +44,14 @@ The pipeline extracts multi-sample Variant Call Format (VCF) data from the **100
  ┌─────────────────────────────────────────────────────────────────────────────┐
  │ dbt Transformation Layer (dbt-duckdb)                                       │
  │                                                                             │
- │  [Staging]                                                                  │
+ │  [Silver: Staging & Intermediate]                                           │
  │   ├── stg_variants.sql (Cleaned types, SNV/Indel classification)             │
  │   └── stg_samples.sql  (Standardized sample IDs, sex, ancestry codes)      │
- │                                                                             │
- │  [Intermediate]                                                             │
  │   ├── int_variant_sample_genotypes.sql (Unnested genotype matrix with QC)   │
  │   ├── int_genomic_binned_stats.sql      (100kb genomic window aggregations) │
  │   └── int_population_allele_freqs.sql  (Allele frequencies by superpop)    │
  │                                                                             │
- │  [Marts / Serving]                                                          │
+ │  [Gold: Marts / Serving]                                                    │
  │   ├── fct_genomic_bin_density.sql       (Density, heterozygosity rate/kb)   │
  │   ├── fct_population_differentiation.sql (Cross-population allele spread)    │
  │   └── fct_variant_qc_metrics.sql        (Ti/Tv ratios, GQ/DP calibration)   │
@@ -72,17 +70,20 @@ The pipeline extracts multi-sample Variant Call Format (VCF) data from the **100
 
 1. **Direct VCF → Arrow → Parquet Extraction**:
    * Leverages `pysam` / `htslib` HTTP range requests to stream multi-gigabyte remote VCFs without downloading monolithic files to disk.
-   * Batches parsed variant records directly into `pyarrow.Table` objects and serializes directly to Parquet with ZSTD compression—eliminating costly intermediate BCF or TSV conversions.
+   * Batches parsed variant records directly into `pyarrow.Table` objects and serializes directly to Parquet with ZSTD compression.
 2. **Semi-Structured Nested Columnar Modeling**:
    * Retains the 3,202 multi-sample genotype calls in nested struct arrays (`LIST<STRUCT<sample_id, gt, gq, dp>>`) in the Bronze layer.
    * Prevents explosive row-multiplication during extraction while allowing DuckDB and dbt to selectively unnest and aggregate genotypes downstream.
-3. **dbt Medallion Architecture**:
-   * **Staging (`stg_`)**: Normalizes types, handles nulls, and standardizes genotype calls (`0/0` $\rightarrow$ Hom-Ref, `0/1` $\rightarrow$ Het, `1/1` $\rightarrow$ Hom-Alt).
-   * **Intermediate (`int_`)**: Windowing, coordinate binning (`floor(pos / 100000) * 100000`), and population demographic joining.
-   * **Marts (`fct_`)**: Dimensional fact tables ready for reporting:
-     * `fct_genomic_bin_density`: Heterozygosity rate, SNV/Indel density per 100kb window.
-     * `fct_population_differentiation`: Superpopulation allele frequencies (`EUR`, `AFR`, `AMR`, `EAS`, `SAS`) and frequency divergence.
-     * `fct_variant_qc_metrics`: Transition vs. Transversion (Ti/Tv) quality calibration curves.
+3. **Medallion Architecture (Bronze → Silver → Gold via dbt)**:
+   * **Bronze (Raw Layer)**: External tables (`bronze.raw_variants`, `bronze.raw_samples`) mapped over partitioned Parquet and raw IGSR metadata.
+   * **Silver (Staging & Intermediate Transformations)**:
+     * **Staging (`stg_`)**: Normalizes types, handles nulls, and standardizes genotype calls (`0/0` $\rightarrow$ Hom-Ref, `0/1` $\rightarrow$ Het, `1/1` $\rightarrow$ Hom-Alt).
+     * **Intermediate (`int_`)**: Windowing, coordinate binning (`floor(pos / 100000) * 100000`), and population demographic joining.
+   * **Gold (Marts / Serving Layer)**:
+     * Dimensional fact tables ready for reporting and downstream BI:
+       * `fct_genomic_bin_density`: Heterozygosity rate, SNV/Indel density per 100kb window.
+       * `fct_population_differentiation`: Superpopulation allele frequencies (`EUR`, `AFR`, `AMR`, `EAS`, `SAS`) and frequency divergence.
+       * `fct_variant_qc_metrics`: Transition vs. Transversion (Ti/Tv) quality calibration curves.
 4. **Data Contracts & Automated Testing**:
    * Built-in schema validation (`unique`, `not_null`, `accepted_values`) and custom genomic range tests.
 5. **Airflow Orchestration**:
@@ -101,7 +102,7 @@ The pipeline extracts multi-sample Variant Call Format (VCF) data from the **100
 
 ### 1. Installation
 ```bash
-# Install Python dependencies via Poetry
+# Install Python dependencies via uv
 make install
 ```
 
