@@ -1,5 +1,7 @@
 FROM python:3.11-slim
 
+COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /bin/
+
 RUN apt-get update && apt-get install -y \
     gcc \
     g++ \
@@ -14,16 +16,13 @@ RUN apt-get update && apt-get install -y \
 
 WORKDIR /app
 
-RUN pip install --no-cache-dir poetry
+COPY pyproject.toml uv.lock* ./
 
-COPY pyproject.toml poetry.lock* ./
-
-RUN poetry config virtualenvs.create false \
-    && poetry install --only main --no-root --no-interaction --no-ansi
+RUN uv sync --frozen --no-dev --no-install-project
 
 COPY src/ ./src/
 
+ENV PATH="/app/.venv/bin:$PATH"
 ENV PYTHONPATH=/app
 
-CMD ["python", "-m", "src.tasks.stream_vcf"]
-
+CMD ["python", "-m", "src.tasks.vcf_to_parquet", "--help"]

@@ -19,6 +19,7 @@ x-airflow-common: &airflow-common
     - pipeline-data:/data
     - ./dags:/opt/airflow/dags
     - ./src:/opt/airflow/src
+    - ./dbt_genomics:/opt/airflow/dbt_genomics
     - ./test_data:/test_data
     - ./tests:/opt/airflow/tests
     
@@ -88,7 +89,7 @@ services:
         echo "Waiting for Airflow to be ready..."
         airflow dags list > /dev/null 2>&1
         echo "Running E2E tests..."
-        airflow dags trigger vcf_pipeline --conf "$(cat /opt/airflow/tests/e2e/e2e.config)"
+        airflow dags trigger genomics_elt_pipeline --conf "$(cat /opt/airflow/tests/e2e/e2e.config)"
     restart: "no"
 
 volumes:

@@ -2,17 +2,25 @@ FROM apache/airflow:2.8.0-python3.11
 
 USER root
 
+# Add uv binary from official image
+COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /bin/
+
 # Add airflow user to docker group (for DockerOperator via socket mount)
 RUN groupadd --gid 999 docker \
     && usermod -aG docker airflow
 
 USER airflow
-RUN pip install --user --no-cache-dir \
-    pysam==0.23.3 \
+
+RUN uv pip install --no-cache \
+    pysam>=0.22.0 \
     pydantic~=2.0 \
+    pyarrow>=14.0.0 \
+    duckdb>=0.9.0 \
+    dbt-duckdb>=1.7.0 \
+    requests>=2.31.0 \
     apache-airflow-providers-docker==3.10.0
 
 WORKDIR ${AIRFLOW_HOME}
 COPY dags/ ${AIRFLOW_HOME}/dags/
 COPY src/ ${AIRFLOW_HOME}/src/
-
+COPY dbt_genomics/ ${AIRFLOW_HOME}/dbt_genomics/
